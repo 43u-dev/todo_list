@@ -5,7 +5,7 @@ import sqlite3
 class TodolistApp(tk.Tk):
     def __init__(self):
         super().__init__()
-
+  
         self.title("Todo List App")
         self.geometry("550x550")
         self.configure(bg="#f0f0f0")  # Fond de la fenêtre

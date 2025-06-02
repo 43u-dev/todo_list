@@ -1,39 +1,29 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-from ttkbootstrap import Style
-import json
+import sqlite3
 
 class TodolistApp(tk.Tk):
     def __init__(self):
         super().__init__()
 
         self.title("Todo List App")
-        self.geometry("550x550")
+        self.geometry("600x600")
+        self.configure(bg="#f0f0f0")
 
-        # Appliquer un style (thème par défaut)
-        self.style = Style(theme="minty")  # 🌿 Thème initial
-        self.configure(bg=self.style.colors.bg)  # Fond de la fenêtre selon le thème
-        
-        # Liste des thèmes disponibles
-        self.theme_var = tk.StringVar(value="minty")
-        themes = ["minty", "darkly", "flatly", "journal", "cyborg", "solar", "superhero"]
+        self.conn = sqlite3.connect("tasks.db")
+        self.cursor = self.conn.cursor()
+        self.create_table()
 
-        # Sélecteur de thème
-        theme_label = ttk.Label(self, text="Choisir un thème :", font=("Arial", 12))
-        theme_label.pack(pady=5)
+        self.style = ttk.Style()
+        self.style.configure("TButton", font=("Arial", 12), padding=5)
+        self.style.configure("TLabel", font=("Arial", 12), background="#f0f0f0")
+        self.style.configure("TEntry", font=("Arial", 12), padding=5)
 
-        theme_menu = ttk.Combobox(self, textvariable=self.theme_var, values=themes, state="readonly")
-        theme_menu.pack(pady=5)
-        theme_menu.bind("<<ComboboxSelected>>", self.change_theme)  # Changer le thème dynamiquement
-
-        # Placeholder par défaut
         self.placeholders = ["Tâche...", "Date...", "Description...", "Priorité..."]
-        
-        # Cadre pour les entrées
-        input_frame = tk.Frame(self, bg=self.style.colors.primary)
+
+        input_frame = tk.Frame(self, bg="#d1e7dd")
         input_frame.pack(pady=10, padx=10, fill=tk.X)
-        
-        # Champs d'entrée avec placeholders
+
         self.entries = []
         for placeholder in self.placeholders:
             entry = ttk.Entry(input_frame, font=("Arial", 12), width=45, foreground="gray")
@@ -42,120 +32,145 @@ class TodolistApp(tk.Tk):
             entry.bind("<FocusIn>", lambda event, e=entry, p=placeholder: self.clear_placeholder(event, e, p))
             entry.bind("<FocusOut>", lambda event, e=entry, p=placeholder: self.restore_placeholder(event, e, p))
             self.entries.append(entry)
-        
-        # Bouton Ajouter
-        ttk.Button(self, text="Ajouter", command=self.add_task, bootstyle="success").pack(pady=5)
-        
-        # Zone d'affichage des tâches
-        list_frame = tk.Frame(self, bg=self.style.colors.light)
+
+        ttk.Button(self, text="Ajouter", command=self.add_task).pack(pady=5)
+
+        filter_frame = tk.Frame(self, bg="#f0f0f0")
+        filter_frame.pack(pady=5)
+        tk.Label(filter_frame, text="Filtrer par priorité:", bg="#f0f0f0").pack(side=tk.LEFT)
+        self.priority_filter = ttk.Combobox(filter_frame, values=["", "Basse", "Moyenne", "Haute"], width=15)
+        self.priority_filter.pack(side=tk.LEFT, padx=5)
+        ttk.Button(filter_frame, text="Filtrer", command=self.filter_tasks).pack(side=tk.LEFT, padx=5)
+        tk.Label(filter_frame, text="Rechercher:", bg="#f0f0f0").pack(side=tk.LEFT)
+        self.search_entry = ttk.Entry(filter_frame, width=20)
+        self.search_entry.pack(side=tk.LEFT, padx=5)
+        ttk.Button(filter_frame, text="Chercher", command=self.search_tasks).pack(side=tk.LEFT)
+
+        list_frame = tk.Frame(self, bg="#ffffff")
         list_frame.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
 
         self.task_list = tk.Listbox(
             list_frame, font=("Arial", 14), height=10, selectmode=tk.SINGLE,
-            bg=self.style.colors.light, fg="black", highlightbackground=self.style.colors.info, highlightthickness=2
+            bg="#ffffff", fg="black", highlightbackground="#87CEEB", highlightthickness=2
         )
         self.task_list.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        
+
         scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.task_list.yview)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.task_list.config(yscrollcommand=scrollbar.set)
-        
-        # Boutons de gestion
-        ttk.Button(self, text="Supprimer", command=self.delete_task, bootstyle="danger").pack(pady=5)
-        ttk.Button(self, text="Voir Statistiques", command=self.view_stats, bootstyle="info").pack(pady=10)
-        
-        # Charger les tâches existantes
+
+        ttk.Button(self, text="Supprimer", command=self.delete_task).pack(pady=5)
+        ttk.Button(self, text="Marquer comme terminée", command=self.mark_done).pack(pady=5)
+        ttk.Button(self, text="Voir Statistiques", command=self.view_stats).pack(pady=10)
+
         self.load_tasks()
-    
-    def change_theme(self, event):
-        """ Change la couleur de l'interface en fonction du thème sélectionné """
-        selected_theme = self.theme_var.get()
-        self.style.theme_use(selected_theme)
-        self.configure(bg=self.style.colors.bg)  # Adapter le fond de la fenêtre
-        print(f"🎨 Thème changé : {selected_theme}")
+
+    def create_table(self):
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS taskes3 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task TEXT,
+                date TEXT,
+                description TEXT,
+                priority TEXT,
+                done INTEGER DEFAULT 0
+            )
+        ''')
+        self.conn.commit()
 
     def clear_placeholder(self, event, entry, placeholder):
-        """ Efface le texte placeholder lorsqu'on clique sur le champ. """
         if entry.get() == placeholder:
             entry.delete(0, tk.END)
             entry.configure(foreground="black")
-    
+
     def restore_placeholder(self, event, entry, placeholder):
-        """ Remet le placeholder si le champ est vide. """
         if entry.get().strip() == "":
             entry.insert(0, placeholder)
             entry.configure(foreground="gray")
-    
+
     def add_task(self):
-        """ Ajoute une tâche avec les 4 informations dans le fichier JSON et l'affiche. """
         values = [entry.get().strip() for entry in self.entries]
-        
-        # Vérifier si tous les champs sont remplis
         if any(val == placeholder or val == "" for val, placeholder in zip(values, self.placeholders)):
             messagebox.showwarning("Entrée incomplète", "Veuillez remplir tous les champs.")
             return
-        
-        task_data = {"Tâche": values[0], "Date": values[1], "Description": values[2], "Priorité": values[3]}
-        
-        # Ajouter à la liste affichée
-        self.task_list.insert(tk.END, f"{values[0]} - {values[1]} - {values[2]} - {values[3]}")
-        
-        # Sauvegarde dans JSON
-        self.save_task_to_json(task_data)
-        
-        # Réinitialiser les champs
+
+        self.cursor.execute("INSERT INTO taskes3 (task, date, description, priority) VALUES (?, ?, ?, ?)", values)
+        self.conn.commit()
+        self.task_list.insert(tk.END, " - ".join(values))
+
         for entry, placeholder in zip(self.entries, self.placeholders):
             entry.delete(0, tk.END)
             entry.insert(0, placeholder)
-    
+
     def delete_task(self):
-        """ Supprime la tâche sélectionnée. """
         try:
             task_index = self.task_list.curselection()[0]
+            task_text = self.task_list.get(task_index)
+            task_name = task_text.split(" - ")[0]
+
+            self.cursor.execute("DELETE FROM taskes3 WHERE task = ?", (task_name,))
+            self.conn.commit()
+
             self.task_list.delete(task_index)
-            self.save_all_tasks_to_json()
         except IndexError:
             messagebox.showwarning("Aucune sélection", "Veuillez sélectionner une tâche.")
-    
+
+    def mark_done(self):
+        try:
+            task_index = self.task_list.curselection()[0]
+            task_text = self.task_list.get(task_index)
+            task_name = task_text.split(" - ")[0]
+
+            self.cursor.execute("UPDATE taskes3 SET done = 1 WHERE task = ?", (task_name,))
+            self.conn.commit()
+
+            self.task_list.itemconfig(task_index, fg="gray")
+        except IndexError:
+            messagebox.showwarning("Aucune sélection", "Veuillez sélectionner une tâche.")
+
     def view_stats(self):
-        """ Affiche le nombre total de tâches. """
-        total_count = self.task_list.size()
-        messagebox.showinfo("Statistiques", f"Tâches totales: {total_count}")
-    
-    def save_task_to_json(self, task_data):
-        """ Sauvegarde une nouvelle tâche dans le fichier JSON. """
-        try:
-            with open("tasks.json", "r", encoding="utf-8") as f:
-                tasks = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            tasks = []
-        
-        tasks.append(task_data)
-        with open("tasks.json", "w", encoding="utf-8") as f:
-            json.dump(tasks, f, indent=4)
-    
-    def save_all_tasks_to_json(self):
-        """ Sauvegarde toutes les tâches affichées dans le fichier JSON. """
-        tasks = []
-        for i in range(self.task_list.size()):
-            values = self.task_list.get(i).split(" - ")
-            if len(values) == 4:
-                tasks.append({"Tâche": values[0], "Date": values[1], "Description": values[2], "Priorité": values[3]})
-        
-        with open("tasks.json", "w", encoding="utf-8") as f:
-            json.dump(tasks, f, indent=4)
-    
+        self.cursor.execute("SELECT COUNT(*) FROM taskes3")
+        total = self.cursor.fetchone()[0]
+
+        self.cursor.execute("SELECT COUNT(*) FROM taskes3 WHERE done = 1")
+        done = self.cursor.fetchone()[0]
+
+        self.cursor.execute("SELECT COUNT(*) FROM taskes3 WHERE done = 0")
+        not_done = self.cursor.fetchone()[0]
+
+        messagebox.showinfo("Statistiques", f"Tâches totales: {total}\nTerminées: {done}\nNon terminées: {not_done}")
+
     def load_tasks(self):
-        """ Charge les tâches depuis le fichier JSON et les affiche. """
-        try:
-            with open("tasks.json", "r", encoding="utf-8") as f:
-                tasks = json.load(f)
-                
-            for task in tasks:
-                if isinstance(task, dict) and all(k in task for k in ["Tâche", "Date", "Description", "Priorité"]):
-                    self.task_list.insert(tk.END, f"{task['Tâche']} - {task['Date']} - {task['Description']} - {task['Priorité']}")
-        except (FileNotFoundError, json.JSONDecodeError):
-            pass
+        self.task_list.delete(0, tk.END)
+        self.cursor.execute("SELECT task, date, description, priority, done FROM taskes3")
+        for idx, task in enumerate(self.cursor.fetchall()):
+            display = " - ".join(task[:-1])
+            self.task_list.insert(tk.END, display)
+            if task[-1] == 1:
+                self.task_list.itemconfig(idx, fg="gray")
+
+    def filter_tasks(self):
+        priority = self.priority_filter.get()
+        self.task_list.delete(0, tk.END)
+        if priority:
+            self.cursor.execute("SELECT task, date, description, priority FROM taskes3 WHERE priority = ?", (priority,))
+        else:
+            self.cursor.execute("SELECT task, date, description, priority FROM taskes3")
+
+        for task in self.cursor.fetchall():
+            self.task_list.insert(tk.END, " - ".join(task))
+
+    def search_tasks(self):
+        keyword = self.search_entry.get().strip().lower()
+        self.task_list.delete(0, tk.END)
+        self.cursor.execute("SELECT task, date, description, priority FROM taskes3")
+
+        for task in self.cursor.fetchall():
+            if any(keyword in str(field).lower() for field in task):
+                self.task_list.insert(tk.END, " - ".join(task))
+
+    def __del__(self):
+        self.conn.close()
 
 if __name__ == '__main__':
     app = TodolistApp()

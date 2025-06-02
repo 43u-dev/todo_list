@@ -1,8 +1,8 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-from ttkbootstrap import Style
 import sqlite3
-from functools import partiapipl  # Ajout de functools.partial
+
+import os  # ajoute ça au début de ton fichier
 
 class TodolistApp(tk.Tk):
     def __init__(self):
@@ -10,31 +10,29 @@ class TodolistApp(tk.Tk):
 
         self.title("Todo List App")
         self.geometry("550x550")
+        self.configure(bg="#f0f0f0")
 
-        # Connexion à la base de données SQLite
-        self.conn = sqlite3.connect("tasks.db")
+        # Définir le chemin de la base de données dans le dossier Musique
+        music_folder = os.path.join(os.path.expanduser("~"), "Musique")
+        os.makedirs(music_folder, exist_ok=True)
+        db_path = os.path.join(music_folder, "taskes3.db")
+
+        self.conn = sqlite3.connect(db_path)
         self.cursor = self.conn.cursor()
-        self.create_table()  # Création de la table si elle n'existe pas
+        self.create_table()
 
-        # Appliquer un style (thème par défaut)
-        self.style = Style(theme="minty")
-        self.configure(bg=self.style.colors.bg)
-        
-        # Liste des thèmes disponibles
-        self.theme_var = tk.StringVar(value="minty")
-        themes = ["minty", "darkly", "flatly", "journal", "cyborg", "solar", "superhero"]
 
-        # Sélecteur de thème
-        ttk.Label(self, text="Choisir un thème :", font=("Arial", 12)).pack(pady=5)
-        theme_menu = ttk.Combobox(self, textvariable=self.theme_var, values=themes, state="readonly")
-        theme_menu.pack(pady=5)
-        theme_menu.bind("<<ComboboxSelected>>", self.change_theme)
+        # Style personnalisé pour les widgets ttk
+        self.style = ttk.Style()
+        self.style.configure("TButton", font=("Arial", 12), padding=5)
+        self.style.configure("TLabel", font=("Arial", 12), background="#f0f0f0")
+        self.style.configure("TEntry", font=("Arial", 12), padding=5)
 
         # Placeholder par défaut
         self.placeholders = ["Tâche...", "Date...", "Description...", "Priorité..."]
 
         # Cadre pour les entrées
-        input_frame = tk.Frame(self, bg=self.style.colors.primary)
+        input_frame = tk.Frame(self, bg="#d1e7dd")
         input_frame.pack(pady=10, padx=10, fill=tk.X)
 
         # Champs d'entrée
@@ -43,23 +41,20 @@ class TodolistApp(tk.Tk):
             entry = ttk.Entry(input_frame, font=("Arial", 12), width=45, foreground="gray")
             entry.pack(pady=5, padx=10)
             entry.insert(0, placeholder)
-
-            # Utilisation de partial pour éviter l'erreur de capture de variable
-            entry.bind("<FocusIn>", partial(self.clear_placeholder, entry=entry, placeholder=placeholder))
-            entry.bind("<FocusOut>", partial(self.restore_placeholder, entry=entry, placeholder=placeholder))
-
+            entry.bind("<FocusIn>", lambda event, e=entry, p=placeholder: self.clear_placeholder(event, e, p))
+            entry.bind("<FocusOut>", lambda event, e=entry, p=placeholder: self.restore_placeholder(event, e, p))
             self.entries.append(entry)
 
         # Bouton Ajouter
-        ttk.Button(self, text="Ajouter", command=self.add_task, bootstyle="success").pack(pady=5)
+        ttk.Button(self, text="Ajouter", command=self.add_task).pack(pady=5)
 
         # Zone d'affichage des tâches
-        list_frame = tk.Frame(self, bg=self.style.colors.light)
+        list_frame = tk.Frame(self, bg="#ffffff")
         list_frame.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
 
         self.task_list = tk.Listbox(
             list_frame, font=("Arial", 14), height=10, selectmode=tk.SINGLE,
-            bg=self.style.colors.light, fg="black", highlightbackground=self.style.colors.info, highlightthickness=2
+            bg="#ffffff", fg="black", highlightbackground="#87CEEB", highlightthickness=2
         )
         self.task_list.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
@@ -68,8 +63,8 @@ class TodolistApp(tk.Tk):
         self.task_list.config(yscrollcommand=scrollbar.set)
 
         # Boutons de gestion
-        ttk.Button(self, text="Supprimer", command=self.delete_task, bootstyle="danger").pack(pady=5)
-        ttk.Button(self, text="Voir Statistiques", command=self.view_stats, bootstyle="info").pack(pady=10)
+        ttk.Button(self, text="Supprimer", command=self.delete_task).pack(pady=5)
+        ttk.Button(self, text="Voir Statistiques", command=self.view_stats).pack(pady=10)
 
         # Charger les tâches existantes
         self.load_tasks()
@@ -77,7 +72,7 @@ class TodolistApp(tk.Tk):
     def create_table(self):
         """Crée la table des tâches si elle n'existe pas"""
         self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS tasks (
+            CREATE TABLE IF NOT EXISTS taskes3(
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 task TEXT,
                 date TEXT,
@@ -86,11 +81,6 @@ class TodolistApp(tk.Tk):
             )
         ''')
         self.conn.commit()
-
-    def change_theme(self, event):
-        selected_theme = self.theme_var.get()
-        self.style.theme_use(selected_theme)
-        self.configure(bg=self.style.colors.bg)
 
     def clear_placeholder(self, event, entry, placeholder):
         if entry.get() == placeholder:
@@ -108,7 +98,7 @@ class TodolistApp(tk.Tk):
             messagebox.showwarning("Entrée incomplète", "Veuillez remplir tous les champs.")
             return
         
-        self.cursor.execute("INSERT INTO tasks (task, date, description, priority) VALUES (?, ?, ?, ?)", values)
+        self.cursor.execute("INSERT INTO taskes3 (task, date, description, priority) VALUES (?, ?, ?, ?)", values)
         self.conn.commit()
         self.task_list.insert(tk.END, " - ".join(values))
         
@@ -122,7 +112,7 @@ class TodolistApp(tk.Tk):
             task_text = self.task_list.get(task_index)
             task_name = task_text.split(" - ")[0]
             
-            self.cursor.execute("DELETE FROM tasks WHERE task = ?", (task_name,))
+            self.cursor.execute("DELETE FROM taskes3 WHERE task = ?", (task_name,))
             self.conn.commit()
             
             self.task_list.delete(task_index)
@@ -130,14 +120,14 @@ class TodolistApp(tk.Tk):
             messagebox.showwarning("Aucune sélection", "Veuillez sélectionner une tâche.")
 
     def view_stats(self):
-        self.cursor.execute("SELECT COUNT(*) FROM tasks")
+        self.cursor.execute("SELECT COUNT(*) FROM taskes3")
         total_count = self.cursor.fetchone()[0]
         messagebox.showinfo("Statistiques", f"Tâches totales: {total_count}")
 
     def load_tasks(self):
-        self.cursor.execute("SELECT task, date, description, priority FROM tasks")
-        tasks = self.cursor.fetchall()
-        for task in tasks:
+        self.cursor.execute("SELECT task, date, description, priority FROM taskes3")
+        taskes3 = self.cursor.fetchall()
+        for task in taskes3:
             self.task_list.insert(tk.END, " - ".join(task))
 
     def __del__(self):
